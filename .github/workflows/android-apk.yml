@@ -41,7 +41,7 @@ jobs:
           fi
           test -f package.json
           test -f App.tsx
-          sed -i 's/supabase\.auth\.onAuthStateChange/supabase!.auth.onAuthStateChange/' App.tsx
+          sed -i 's/supabase\.auth/supabase!.auth/g' App.tsx
           if [ -f .env ]; then
             grep -E '^(EXPO_PUBLIC_SUPABASE_URL|EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY)=' .env >> "$GITHUB_ENV" || true
           fi
