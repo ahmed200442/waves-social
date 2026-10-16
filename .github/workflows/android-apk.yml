@@ -3,7 +3,7 @@ name: Build WAVE Social Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -20,35 +20,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Extract uploaded WAVE source archive
+      - name: Select exact WAVE source archive
         shell: bash
         run: |
-          if [ ! -f package.json ] || [ ! -f App.tsx ]; then
-            ARCHIVE="$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)"
-            if [ -z "$ARCHIVE" ]; then
-              echo "No project source found. Upload the WAVE-Social ZIP archive to the repository root."
-              exit 1
-            fi
-            mkdir -p /tmp/wave-source
-            unzip -q "$ARCHIVE" -d /tmp/wave-source
-            SOURCE_DIR="$(find /tmp/wave-source -type f -name package.json -print -quit | xargs -r dirname)"
-            if [ -z "$SOURCE_DIR" ] || [ ! -f "$SOURCE_DIR/App.tsx" ]; then
-              echo "Archive does not contain package.json and App.tsx together."
-              find /tmp/wave-source -maxdepth 4 -type f | head -80
-              exit 1
-            fi
-            cp -a "$SOURCE_DIR"/. .
+          ARCHIVE="WAVE-Social-v0.4.6-preflight.zip"
+          if [ ! -f "$ARCHIVE" ]; then
+            echo "::error::Missing $ARCHIVE. Upload this exact source archive to the repository root before building."
+            echo "Do not use the older v0.2.4 archive."
+            exit 1
           fi
+          mkdir -p /tmp/wave-source
+          unzip -q "$ARCHIVE" -d /tmp/wave-source
+          SOURCE_DIR="$(find /tmp/wave-source -type f -name package.json -print -quit | xargs -r dirname)"
+          if [ -z "$SOURCE_DIR" ] || [ ! -f "$SOURCE_DIR/App.tsx" ]; then
+            echo "::error::Archive does not contain package.json and App.tsx together."
+            exit 1
+          fi
+          cp -a "$SOURCE_DIR"/. .
           test -f package.json
           test -f App.tsx
           sed -i 's/supabase\.auth/supabase!.auth/g' App.tsx
-          if [ -f .env ]; then
-            grep -E '^(EXPO_PUBLIC_SUPABASE_URL|EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY)=' .env >> "$GITHUB_ENV" || true
-          fi
       - name: Verify Supabase configuration
         run: |
-          test -n "$EXPO_PUBLIC_SUPABASE_URL" || (echo "Missing EXPO_PUBLIC_SUPABASE_URL. Add it in GitHub Actions secrets or .env." && exit 1)
-          test -n "$EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY" || (echo "Missing EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY. Add it in GitHub Actions secrets or .env." && exit 1)
+          test -n "$EXPO_PUBLIC_SUPABASE_URL" || (echo "::error::Missing EXPO_PUBLIC_SUPABASE_URL repository secret." && exit 1)
+          test -n "$EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY" || (echo "::error::Missing EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY repository secret." && exit 1)
       - run: npm install --no-audit --no-fund
       - run: npm run typecheck
       - uses: actions/setup-java@v4
@@ -61,14 +56,14 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean --no-install
-      - name: Build APK
+      - name: Build release APK
         run: |
           chmod +x android/gradlew
           cd android
           ./gradlew assembleRelease --no-daemon
       - uses: actions/upload-artifact@v4
         with:
-          name: wave-social-debug-apk
+          name: wave-social-release-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
